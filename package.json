@@ -1,0 +1,32 @@
+{
+  "name": "sudtechnology/sud-gip-auth-nodejs", // 包名（需唯一，建议与PHP版本保持命名风格一致）
+  "version": "1.0.0", // 初始版本号（遵循语义化版本：MAJOR.MINOR.PATCH）
+  "description": "Node.js implementation of Sud GIP authentication system with JWT support",
+  "keywords": ["auth", "sdk", "gip", "sud", "authentication", "jwt"],
+  "homepage": "https://github.com/SudTechnology/sud-gip-auth-nodejs", // 项目仓库地址
+  "license": "MIT", // 沿用原PHP项目的MIT许可证
+  "main": "src/api/SudGIPAuth.js", // 入口文件
+  "author": {
+    "name": "Sud Technology",
+    "email": "dev@sud.tech",
+    "url": "https://sud.tech"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SudTechnology/sud-gip-auth-nodejs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SudTechnology/sud-gip-auth-nodejs/issues"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.56.0"
+  },
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src/"
+  }
+}
