@@ -1,4 +1,3 @@
-const SdkTokenResponse = require('./SdkTokenResponse');
 
 /**
  * 认证码类

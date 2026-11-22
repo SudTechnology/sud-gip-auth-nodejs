@@ -2,7 +2,6 @@ const SudCode = require('./SudCode');
 const SudSSToken = require('./SudSSToken');
 const SudUid = require('./SudUid');
 const TokenUtils = require('../auth/TokenUtils');
-const ErrorCodeEnum = require('../auth/ErrorCodeEnum');
 
 /**
  * GIP认证工具类
@@ -17,6 +16,8 @@ class SudGIPAuth {
      * @param {string} appSecret
      */
     constructor(appId, appSecret) {
+        TokenUtils.requireString(appId, 'appId');
+        TokenUtils.requireString(appSecret, 'appSecret');
         this.appId = appId;
         this.appSecret = appSecret;
     }
@@ -29,6 +30,9 @@ class SudGIPAuth {
      * @returns {SudCode}
      */
     getCode(uid, expireDuration = null) {
+        if (expireDuration !== null) {
+            TokenUtils.validateDuration(expireDuration);
+        }
         if (expireDuration === null) {
             expireDuration = SudGIPAuth.DEFAULT_MAX_CODE_EXPIRE_DURATION;
         } else if (expireDuration < SudGIPAuth.DEFAULT_MIN_CODE_EXPIRE_DURATION) {
@@ -52,6 +56,9 @@ class SudGIPAuth {
      * @returns {SudSSToken}
      */
     getSSToken(uid, expireDuration = null) {
+        if (expireDuration !== null) {
+            TokenUtils.validateDuration(expireDuration);
+        }
         if (expireDuration === null) {
             expireDuration = SudGIPAuth.DEFAULT_MIN_SSTOKEN_EXPIRE_DURATION;
         } else if (expireDuration < SudGIPAuth.DEFAULT_MIN_SSTOKEN_EXPIRE_DURATION) {
@@ -115,16 +122,12 @@ class SudGIPAuth {
      */
     getSdkUidResponse(token) {
         const resp = new SudUid();
-        const errorCodeEnum = this.verifySSToken(token);
-        const isSuccess = errorCodeEnum[0] === ErrorCodeEnum.SUCCESS[0];
-        resp.isSuccess = isSuccess;
-
-        if (!isSuccess) {
-            resp.errorCode = errorCodeEnum[0];
-            return resp;
+        const result = TokenUtils.verifyAndDecode(token, this.appSecret);
+        resp.errorCode = result.error[0];
+        resp.isSuccess = resp.errorCode === 0;
+        if (resp.isSuccess) {
+            resp.uid = result.payload.uid;
         }
-
-        resp.uid = TokenUtils.getUID(token, this.appSecret);
         return resp;
     }
 }

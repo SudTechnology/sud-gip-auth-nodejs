@@ -1,4 +1,3 @@
-const SdkTokenResponse = require('./SdkTokenResponse');
 
 /**
  * 服务器到服务器Token类

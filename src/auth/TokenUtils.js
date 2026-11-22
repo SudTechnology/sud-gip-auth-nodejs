@@ -1,140 +1,99 @@
 const jwt = require('jsonwebtoken');
 const ErrorCodeEnum = require('./ErrorCodeEnum');
+const SdkTokenResponse = require('../api/SdkTokenResponse');
 
-/**
- * Token工具类
- */
+/** JWT signing and validation. Never log credentials, tokens, or decoded claims. */
 class TokenUtils {
-    static UID_KEY = "uid";
-    static APP_ID_KEY = "app_id";
+    static UID_KEY = 'uid';
+    static APP_ID_KEY = 'app_id';
 
-    /**
-     * 生成Token
-     *
-     * @param {string} appId 应用ID
-     * @param {string} appSecret 应用密钥
-     * @param {string} uid 用户ID
-     * @param {number} expireDuration 过期时长（毫秒）
-     * @returns {SdkTokenResponse}
-     */
-    static token(appId, appSecret, uid, expireDuration) {
-        const claimMap = {
-            [this.UID_KEY]: uid,
-            [this.APP_ID_KEY]: appId
-        };
-        return this.doCreateToken(appSecret, claimMap, expireDuration);
+    static requireString(value, name) {
+        if (typeof value !== 'string' || value.trim().length === 0) {
+            throw new TypeError(`${name} must be a non-empty string`);
+        }
     }
 
-    /**
-     * 创建Token
-     *
-     * @param {string} appSecret 应用密钥
-     * @param {object} claimMap 声明映射
-     * @param {number} expireDuration 过期时长（毫秒）
-     * @returns {SdkTokenResponse}
-     */
-    static doCreateToken(appSecret, claimMap, expireDuration) {
-        try {
-            const SdkTokenResponse = require('../api/SdkTokenResponse');
-            const expireDate = Math.floor(Date.now() / 1000) + (expireDuration / 1000);
-            const payload = { ...claimMap, exp: expireDate };
+    static validateDuration(duration) {
+        if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) {
+            throw new RangeError('expireDuration must be a positive finite number of milliseconds');
+        }
+        if (!Number.isSafeInteger(Math.ceil(Date.now() + duration))) {
+            throw new RangeError('expireDuration exceeds the supported timestamp range');
+        }
+    }
 
-            const token = jwt.sign(payload, appSecret, {
+    static token(appId, appSecret, uid, expireDuration) {
+        this.requireString(appId, 'appId');
+        this.requireString(appSecret, 'appSecret');
+        this.requireString(uid, 'uid');
+        this.validateDuration(expireDuration);
+        return this.doCreateToken(appSecret, { uid, app_id: appId }, expireDuration);
+    }
+
+    static doCreateToken(appSecret, claimMap, expireDuration) {
+        this.validateDuration(expireDuration);
+        const exp = Math.floor(Date.now() / 1000) + expireDuration / 1000;
+        try {
+            const token = jwt.sign({ ...claimMap, exp }, appSecret, {
                 algorithm: 'HS256',
                 header: { typ: 'JWT', alg: 'HS256' }
             });
-
-            console.log(`Generated Token: ${token}`);
-            return new SdkTokenResponse(token, expireDate * 1000);
-        } catch (e) {
-            console.error(`Token generation failed: ${e.message}`);
-            return null;
+            return new SdkTokenResponse(token, exp * 1000);
+        } catch (cause) {
+            const error = new Error('Token creation failed');
+            error.errorCode = ErrorCodeEnum.TOKEN_CREATE_FAILED[0];
+            error.cause = cause;
+            throw error;
         }
     }
 
-    /**
-     * 验证Token
-     *
-     * @param {string} token Token
-     * @param {string} appSecret 应用密钥
-     * @returns {array} 错误码和消息
-     */
-    static verify(token, appSecret) {
-        if (!token) {
-            return ErrorCodeEnum.TOKEN_INVALID;
+    /** Verify once and retain the authenticated payload for UID extraction. */
+    static verifyAndDecode(token, appSecret) {
+        if (typeof token !== 'string' || !token.trim()) {
+            return { error: ErrorCodeEnum.TOKEN_INVALID };
         }
-        if (!appSecret) {
-            return ErrorCodeEnum.APP_DATA_INVALID;
+        if (typeof appSecret !== 'string' || !appSecret.trim()) {
+            return { error: ErrorCodeEnum.APP_DATA_INVALID };
         }
-
         try {
-            this.doVerify(token, appSecret);
-            return ErrorCodeEnum.SUCCESS;
-        } catch (e) {
-            if (e.name === 'TokenExpiredError') {
-                return ErrorCodeEnum.TOKEN_EXPIRED;
+            return { error: ErrorCodeEnum.SUCCESS, payload: this.doVerify(token, appSecret) };
+        } catch (error) {
+            if (error.name === 'TokenExpiredError') {
+                return { error: ErrorCodeEnum.TOKEN_EXPIRED };
             }
-            return ErrorCodeEnum.TOKEN_VERIFY_FAILED;
+            return { error: error.invalidClaims
+                ? ErrorCodeEnum.TOKEN_INVALID : ErrorCodeEnum.TOKEN_VERIFY_FAILED };
         }
     }
 
-    /**
-     * 执行Token验证
-     *
-     * @param {string} token Token
-     * @param {string} appSecret 应用密钥
-     * @throws {Error}
-     */
+    static verify(token, appSecret) {
+        return this.verifyAndDecode(token, appSecret).error;
+    }
+
     static doVerify(token, appSecret) {
-        try {
-            const decoded = jwt.verify(token, appSecret, { algorithms: ['HS256'] });
-            console.log(`Decoded Token: ${JSON.stringify(decoded)}`);
-            return decoded;
-        } catch (e) {
-            console.error(`Token verification failed: ${e.message}`);
-            throw e;
+        const payload = jwt.verify(token, appSecret, { algorithms: ['HS256'] });
+        // A valid signature alone does not establish a usable SDK identity.
+        if (!payload || typeof payload !== 'object'
+            || typeof payload.uid !== 'string' || !payload.uid.trim()
+            || typeof payload.app_id !== 'string' || !payload.app_id.trim()
+            || typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+            const error = new Error('Token is missing valid required claims');
+            error.invalidClaims = true;
+            throw error;
         }
+        return payload;
     }
 
-    /**
-     * 从Token获取UID
-     *
-     * @param {string} token Token
-     * @param {string} appSecret 应用密钥
-     * @returns {string|null} UID
-     */
     static getUID(token, appSecret) {
         return this.doGetValueFromToken(token, this.UID_KEY, appSecret);
     }
 
-    /**
-     * 从Token获取AppID
-     *
-     * @param {string} token Token
-     * @param {string} appSecret 应用密钥
-     * @returns {string|null} AppID
-     */
     static getAppID(token, appSecret) {
         return this.doGetValueFromToken(token, this.APP_ID_KEY, appSecret);
     }
 
-    /**
-     * 从Token获取值
-     *
-     * @param {string} token Token
-     * @param {string} key 键
-     * @param {string} appSecret 应用密钥
-     * @returns {string|null} 值
-     */
     static doGetValueFromToken(token, key, appSecret) {
-        try {
-            const decoded = jwt.verify(token, appSecret, { algorithms: ['HS256'] });
-            console.log(`Decoded token claims: ${JSON.stringify(decoded)}`);
-            return decoded[key] || null;
-        } catch (e) {
-            console.error(`Failed to decode token: ${e.message}`);
-            throw e;
-        }
+        return this.doVerify(token, appSecret)[key] || null;
     }
 }
 

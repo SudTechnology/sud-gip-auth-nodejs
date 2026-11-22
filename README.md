@@ -11,7 +11,7 @@ The Sud GIP Auth Node.js SDK is a Node.js library designed for implementing the 
 ## Installation
 You can install this SDK using npm. Run the following command in your project's root directory:
 ```bash
-npm install sudtechnology/sud-gip-auth-nodejs
+npm install sud-gip-auth-nodejs
 ```
 
 ## Usage
@@ -31,7 +31,7 @@ const auth = new SudGIPAuth(appId, appSecret);
 const uid = 'user_id';
 const code = auth.getCode(uid);
 
-console.log('Code:', code.code);
+// Send code.code to the authenticated client. Do not log tokens.
 console.log('Expire Date:', code.expireDate);
 ```
 
@@ -41,7 +41,7 @@ console.log('Expire Date:', code.expireDate);
 const uid = 'user_id';
 const ssToken = auth.getSSToken(uid);
 
-console.log('SSToken:', ssToken.token);
+// Return ssToken.token to the caller. Do not log tokens.
 console.log('Expire Date:', ssToken.expireDate);
 ```
 
@@ -81,3 +81,45 @@ if (uidResponse.isSuccess) {
 | 1101       | App数据非法          |
 | 9999       | 未知错误             |
 
+
+## Runtime and validation
+
+Node.js 18 or later is required. Use a maintained Node.js release in production.
+App ID, AppSecret, and UID must be non-empty strings. Use your issued AppSecret
+unchanged; do not pad or hash it locally. The SDK does not log tokens or claims.
+
+Optional expiration durations are positive finite numbers in **milliseconds**.
+Code defaults to two hours, with a minimum of 30 minutes. SSToken defaults to
+and has a minimum of two hours. Smaller positive durations are raised to the
+minimum. `expireDate` is a Unix timestamp in milliseconds; JWT `exp` is seconds.
+
+Invalid configuration or UID throws `TypeError`; invalid duration throws
+`RangeError`. Signing failures throw an error with `errorCode: 1001` and the
+original `cause`. Callers should catch signing errors without logging secrets.
+Verification methods return `[errorCode, message]`; UID methods return
+`{ uid, isSuccess, errorCode }`. Invalid tokens do not throw from these methods.
+Verification requires a valid HS256 signature, expiration, and non-empty string
+`uid` and `app_id` claims. Missing required claims return 1004; expired tokens
+return 1005; signature or parsing failures return 1002.
+
+Code and SSToken share the token format. This SDK does not enforce token purpose
+or compare the token app ID against the constructor app ID. Use a distinct issued
+secret per application and perform any additional application policy checks in
+your server.
+
+### Compatibility notes
+
+Validation is stricter: empty or non-string identifiers, invalid durations, and
+tokens without required claims are rejected. Existing valid tokens retain their
+format and signing algorithm. Code that previously relied on unchecked inputs
+must handle these errors before upgrading.
+
+## Development
+
+```bash
+npm ci
+npm test -- --runInBand
+npm run lint
+npm audit --omit=dev
+npm pack --dry-run
+```
