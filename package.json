@@ -1,6 +1,6 @@
 {
   "name": "sud-gip-auth-nodejs",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Node.js implementation of Sud GIP authentication system with JWT support",
   "keywords": [
     "auth",
