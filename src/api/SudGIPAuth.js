@@ -133,3 +133,6 @@ class SudGIPAuth {
 }
 
 module.exports = SudGIPAuth;
+
+// Additive named export; the default SudGIPAuth constructor remains compatible.
+module.exports.RequestSigner = require('./RequestSigner');

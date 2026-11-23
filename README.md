@@ -123,3 +123,53 @@ npm run lint
 npm audit --omit=dev
 npm pack --dry-run
 ```
+
+
+## HTTP Request Signing
+
+`RequestSigner` supports outgoing Sud API requests and incoming callback verification.
+It is independent of JWT Code/SSToken authentication and is available since 2.1.0.
+Existing default imports of `SudGIPAuth` remain unchanged.
+
+```javascript
+const { RequestSigner } = require('sud-gip-auth-nodejs');
+const signer = new RequestSigner(process.env.APP_ID, process.env.APP_SECRET);
+const timestamp = String(Date.now());
+const nonce = require('node:crypto').randomBytes(16).toString('hex');
+// Serialize once, sign this Buffer, and send exactly the same Buffer as the body.
+const rawBody = Buffer.from(JSON.stringify({ example: 'value' }), 'utf8');
+const authorization = signer.generateAuthorization(timestamp, nonce, rawBody);
+// Set the outgoing Authorization header to authorization.
+```
+
+The Authorization value is one line:
+`Sud-Auth app_id="...",timestamp="...",nonce="...",signature="..."`.
+`generateSignature(timestamp, nonce, rawBody)` returns the lowercase hexadecimal
+HMAC-SHA1 of `appId + "\n" + timestamp + "\n" + nonce + "\n" + rawBody + "\n"`.
+All four fields have a trailing LF, including an empty body. Use the original
+application secret unchanged. Metadata must be nonempty printable ASCII without
+spaces, double quotes, backslashes, or commas. Invalid generation inputs throw
+`TypeError`; invalid verification inputs return `false`.
+
+For callbacks, extract `Sud-AppId`, `Sud-Timestamp`, `Sud-Nonce`, and `Sud-Signature`
+from the HTTP headers, then call:
+
+```javascript
+const valid = signer.verifySignature(
+    appIdHeader, timestampHeader, nonceHeader, originalBodyBuffer, signatureHeader
+);
+// Reject invalid requests before parsing JSON or performing business operations.
+```
+
+**Always verify the ORIGINAL received bytes. Never deserialize/re-serialize JSON,
+trim, normalize whitespace or line endings, decode/re-encode, or decompress the
+body before verification.** Pass a Buffer for incoming bodies; strings are encoded
+as UTF-8. An absent body is an empty Buffer. HTTP frameworks must capture the body
+before any parsing middleware. Reject duplicate/ambiguous signature headers in the
+HTTP adapter. Digest comparison uses constant-time comparison and the supplied
+application ID must match the configured ID.
+
+This protocol does not sign the method, URL, or query, and does not itself enforce
+timestamp freshness or prevent nonce replay. Those policies belong to the receiving
+service. Callback signatures do not replace Code/SSToken validation. Keep application
+secrets on trusted servers; do not embed them in browsers or mobile applications.
