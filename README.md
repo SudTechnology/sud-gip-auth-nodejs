@@ -173,3 +173,26 @@ This protocol does not sign the method, URL, or query, and does not itself enfor
 timestamp freshness or prevent nonce replay. Those policies belong to the receiving
 service. Callback signatures do not replace Code/SSToken validation. Keep application
 secrets on trusted servers; do not embed them in browsers or mobile applications.
+
+
+## App Server Config signature (ASC)
+
+Available since **2.2.0**:
+
+```javascript
+const { ascSign } = require('sud-gip-auth-nodejs');
+const sign = ascSign(appId, appSecret);
+```
+
+ASC means **App Server Config**. This helper returns a **32-character lowercase
+hexadecimal HMAC-MD5** signature. The message is the original UTF-8 app ID and the
+key is the original UTF-8 secret. **No newline is appended.** Do not trim,
+normalize, or pre-hash either input. Existing whitespace is preserved.
+
+Inputs must be nonempty strings containing valid Unicode; otherwise a `TypeError`
+is thrown. The JWT HS256 32-byte secret minimum does not apply to ASC signing.
+
+This helper only calculates the ASC sign. It does not construct URLs, perform
+HTTP requests, fetch configuration, cache results, or refresh configuration.
+It is separate from `RequestSigner` (HMAC-SHA1 business request/callback signing)
+and JWT authentication. Existing package exports remain compatible.
